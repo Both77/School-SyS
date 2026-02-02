@@ -28,7 +28,7 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_URL }}
         run: |
-          cd client
+          cd school-sms-web
           npm ci
           npm run build
           cd ..
@@ -61,10 +61,10 @@ jobs:
         run: |
           mkdir deploy_dist
 
-          # Frontend
-          cp -r client/dist/* deploy_dist/
+          # Frontend build output
+          cp -r school-sms-web/dist/* deploy_dist/
 
-          # Backend
+          # Backend (Laravel)
           mkdir deploy_dist/api
           cp -r API/. deploy_dist/api/
 
