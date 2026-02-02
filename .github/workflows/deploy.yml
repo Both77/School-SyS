@@ -11,32 +11,30 @@ jobs:
   web-deploy:
     name: 🎉 Deploy
     runs-on: ubuntu-latest
+
     steps:
       - name: 🚚 Get latest code
         uses: actions/checkout@v4
 
       # --------------------------------------------------------
-      # 1. OPTIMIZE FRONTEND (Vue.js)
+      # 1. FRONTEND (Vue)
       # --------------------------------------------------------
-      - name: 🟢 Setup Node.js (with Cache)
+      - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
-        continue-on-error: true
         with:
           node-version: "18"
-          cache: "npm"
-          cache-dependency-path: CLIENT/package-lock.json
 
       - name: 🔨 Build Frontend
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_URL }}
         run: |
-          cd CLIENT
+          cd client
           npm ci
           npm run build
           cd ..
 
       # --------------------------------------------------------
-      # 2. OPTIMIZE BACKEND (Laravel)
+      # 2. BACKEND (Laravel)
       # --------------------------------------------------------
       - name: 🐘 Setup PHP
         uses: shivammathur/setup-php@v2
@@ -57,29 +55,29 @@ jobs:
           cd ..
 
       # --------------------------------------------------------
-      # 3. PREPARE & DEPLOY
+      # 3. PREPARE FILES
       # --------------------------------------------------------
       - name: 📂 Prepare Deployment Files
         run: |
           mkdir deploy_dist
-          
-          # Copy Frontend Build
-          cp -r CLIENT/dist/* deploy_dist/
-          
-          # Copy Backend (Laravel)
+
+          # Frontend
+          cp -r client/dist/* deploy_dist/
+
+          # Backend
           mkdir deploy_dist/api
           cp -r API/. deploy_dist/api/
 
-          # Create .env file
+          # Laravel env
           echo "${{ secrets.LARAVEL_ENV }}" > deploy_dist/api/.env
 
-          # Create .htaccess for API
+          # API .htaccess
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteRule ^(.*)$ public/\$1 [L]
           </IfModule>" > deploy_dist/api/.htaccess
 
-          # Create .htaccess for Vue
+          # Vue .htaccess
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
@@ -89,6 +87,9 @@ jobs:
             RewriteRule . /index.html [L]
           </IfModule>" > deploy_dist/.htaccess
 
+      # --------------------------------------------------------
+      # 4. DEPLOY
+      # --------------------------------------------------------
       - name: 🚀 Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
@@ -99,7 +100,5 @@ jobs:
           server-dir: ./htdocs/
           exclude: |
             **/.git*
-            **/.git*/**
             **/node_modules/**
-            deploy_dist/api/node_modules/**
-            deploy_dist/api/tests/**
+            **/tests/**
