@@ -49,9 +49,7 @@ jobs:
 
           if [ -z "$BACKEND_DIR" ]; then
             echo "❌ Could not find Laravel backend (artisan + composer.json)."
-            echo "Repo root:"
             ls -la
-            echo "Dirs:"
             find . -maxdepth 2 -type d -print
             exit 1
           fi
@@ -105,25 +103,29 @@ jobs:
           </IfModule>" > deploy_dist/.htaccess
 
       # ----------------------------
-      # DEPLOY (InfinityFree-friendly)
+      # DEPLOY (lftp is more reliable on InfinityFree)
       # ----------------------------
-      - name: 🚀 Deploy via FTP (FTPS + passive + long timeout)
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps
-          port: 21
-          security: loose
-          passive: true
-          local-dir: ./deploy_dist/
-          server-dir: ./htdocs/
-          dangerous-clean-slate: false
-          log-level: verbose
-          timeout: 600000
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            **/tests/**
+      - name: 🚀 Deploy via lftp (retries + 1 parallel)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lftp
+
+          # NOTE:
+          # - InfinityFree often breaks FTPS. If your account supports FTPS reliably,
+          #   change "set ftp:ssl-allow no" to "set ftp:ssl-allow yes".
+          # - This uses passive mode + retries to survive disconnects.
+
+          lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" "${{ secrets.FTP_SERVER }}" << 'EOF'
+          set ftp:passive-mode true
+          set net:timeout 30
+          set net:max-retries 25
+          set net:reconnect-interval-base 5
+          set net:reconnect-interval-max 60
+          set net:persist-retries 1
+          set ftp:ssl-allow no
+
+          # Upload with low parallelism (InfinityFree disconnects on high load)
+          mirror -R --parallel=1 --only-newer --verbose ./deploy_dist/ ./htdocs/
+
+          quit
+          EOF
