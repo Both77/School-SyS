@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
 
       # ----------------------------
-      # FRONTEND (Vite/Vue)
+      # FRONTEND (Vite / Vue)
       # ----------------------------
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
@@ -31,7 +31,7 @@ jobs:
           npm run build
 
       # ----------------------------
-      # BACKEND (Laravel) - auto detect folder
+      # BACKEND (Laravel) - auto detect
       # ----------------------------
       - name: 🐘 Setup PHP
         uses: shivammathur/setup-php@v2
@@ -49,7 +49,6 @@ jobs:
 
           if [ -z "$BACKEND_DIR" ]; then
             echo "❌ Could not find Laravel backend (artisan + composer.json)."
-            ls -la
             find . -maxdepth 2 -type d -print
             exit 1
           fi
@@ -76,23 +75,23 @@ jobs:
         run: |
           mkdir -p deploy_dist
 
-          # Frontend output
+          # Frontend
           cp -r school-sms-web/dist/* deploy_dist/
 
-          # Backend -> deploy_dist/api
+          # Backend
           mkdir -p deploy_dist/api
           cp -r "${{ steps.detect_backend.outputs.backend_dir }}/." deploy_dist/api/
 
-          # Laravel .env
+          # Laravel env
           echo "${{ secrets.LARAVEL_ENV }}" > deploy_dist/api/.env
 
-          # API .htaccess (route /api/* to public/)
+          # Laravel rewrite
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteRule ^(.*)$ public/\$1 [L]
           </IfModule>" > deploy_dist/api/.htaccess
 
-          # Vue SPA .htaccess
+          # Vue SPA rewrite
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
@@ -103,29 +102,30 @@ jobs:
           </IfModule>" > deploy_dist/.htaccess
 
       # ----------------------------
-      # DEPLOY (lftp is more reliable on InfinityFree)
+      # DEPLOY (lftp – InfinityFree hardened)
       # ----------------------------
-      - name: 🚀 Deploy via lftp (retries + 1 parallel)
+      - name: 🚀 Deploy via lftp (NO chmod, safe)
         run: |
           sudo apt-get update
           sudo apt-get install -y lftp
 
-          # NOTE:
-          # - InfinityFree often breaks FTPS. If your account supports FTPS reliably,
-          #   change "set ftp:ssl-allow no" to "set ftp:ssl-allow yes".
-          # - This uses passive mode + retries to survive disconnects.
-
           lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" "${{ secrets.FTP_SERVER }}" << 'EOF'
           set ftp:passive-mode true
+          set ftp:chmod no
+          set ftp:ssl-allow no
           set net:timeout 30
-          set net:max-retries 25
+          set net:max-retries 30
           set net:reconnect-interval-base 5
           set net:reconnect-interval-max 60
           set net:persist-retries 1
-          set ftp:ssl-allow no
 
-          # Upload with low parallelism (InfinityFree disconnects on high load)
-          mirror -R --parallel=1 --only-newer --verbose ./deploy_dist/ ./htdocs/
+          mirror -R \
+            --parallel=1 \
+            --only-newer \
+            --no-perms \
+            --no-umask \
+            --verbose \
+            ./deploy_dist/ ./htdocs/
 
           quit
           EOF
