@@ -1,0 +1,1 @@
+import{q as s}from"./index-Cz2jkUhJ.js";async function o(){const[e,t,a]=await Promise.all([s.get("/classes"),s.get("/sections"),s.get("/subjects")]);return{classes:e.data,sections:t.data,subjects:a.data}}export{o as f};

@@ -1,0 +1,7 @@
+In your `app/Models/User.php`, ensure:
+
+- use Laravel\Sanctum\HasApiTokens;
+- class uses HasApiTokens
+
+And add 'role' to $fillable:
+protected $fillable = ['name','email','password','role'];
