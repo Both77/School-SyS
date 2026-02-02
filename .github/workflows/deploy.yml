@@ -27,7 +27,7 @@ jobs:
 
       - name: 🔨 Build Frontend
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_URL }}
         run: |
           cd CLIENT
           npm ci                        # 'npm ci' is faster/safer than 'npm install' for builds
