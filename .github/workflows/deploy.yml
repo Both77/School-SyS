@@ -105,17 +105,25 @@ jobs:
           </IfModule>" > deploy_dist/.htaccess
 
       # ----------------------------
-      # DEPLOY
+      # DEPLOY (InfinityFree-friendly)
       # ----------------------------
-      - name: 🚀 Deploy via FTP
+      - name: 🚀 Deploy via FTP (FTPS + passive + long timeout)
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          security: loose
+          passive: true
           local-dir: ./deploy_dist/
           server-dir: ./htdocs/
+          dangerous-clean-slate: false
+          log-level: verbose
+          timeout: 600000
           exclude: |
             **/.git*
+            **/.git*/**
             **/node_modules/**
             **/tests/**
