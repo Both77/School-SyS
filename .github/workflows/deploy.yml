@@ -1,0 +1,104 @@
+name: Deploy to InfinityFree
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  web-deploy:
+    name: 🎉 Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚚 Get latest code
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------------
+      # 1. OPTIMIZE FRONTEND (Vue.js)
+      # --------------------------------------------------------
+      - name: 🟢 Setup Node.js (with Cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'                  # Enables caching for npm
+          cache-dependency-path: CLIENT/package-lock.json # Tells it where to look
+
+      - name: 🔨 Build Frontend
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: |
+          cd CLIENT
+          npm ci                        # 'npm ci' is faster/safer than 'npm install' for builds
+          npm run build
+          cd ..
+
+      # --------------------------------------------------------
+      # 2. OPTIMIZE BACKEND (Laravel)
+      # --------------------------------------------------------
+      - name: 🐘 Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: 📦 Cache Composer dependencies
+        uses: actions/cache@v3
+        with:
+          path: API/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('API/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: 🔨 Install Backend Dependencies
+        run: |
+          cd API
+          composer install --no-dev --optimize-autoloader --prefer-dist
+          cd ..
+
+      # --------------------------------------------------------
+      # 3. PREPARE & DEPLOY
+      # --------------------------------------------------------
+      - name: 📂 Prepare Deployment Files
+        run: |
+          mkdir deploy_dist
+          
+          # Copy Frontend Build
+          cp -r CLIENT/dist/* deploy_dist/
+          
+          # Copy Backend (Laravel)
+          mkdir deploy_dist/api
+          cp -r API/. deploy_dist/api/
+
+          # Create .env file (CRITICAL STEP FROM PREVIOUS CHAT)
+          echo "${{ secrets.LARAVEL_ENV }}" > deploy_dist/api/.env
+
+          # Create .htaccess for API (CRITICAL STEP FROM PREVIOUS CHAT)
+          echo "<IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteRule ^(.*)$ public/\$1 [L]
+          </IfModule>" > deploy_dist/api/.htaccess
+
+          # Create .htaccess for Vue (CRITICAL STEP FROM PREVIOUS CHAT)
+          echo "<IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /
+            RewriteRule ^index\.html$ - [L]
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /index.html [L]
+          </IfModule>" > deploy_dist/.htaccess
+
+      - name: 🚀 Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deploy_dist/
+          server-dir: ./htdocs/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            deploy_dist/api/node_modules/**
+            deploy_dist/api/tests/**
