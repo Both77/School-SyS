@@ -20,17 +20,18 @@ jobs:
       # --------------------------------------------------------
       - name: 🟢 Setup Node.js (with Cache)
         uses: actions/setup-node@v4
+        continue-on-error: true
         with:
-          node-version: '18'
-          cache: 'npm'                  # Enables caching for npm
-          cache-dependency-path: CLIENT/package-lock.json # Tells it where to look
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: CLIENT/package-lock.json
 
       - name: 🔨 Build Frontend
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_URL }}
         run: |
           cd CLIENT
-          npm ci                        # 'npm ci' is faster/safer than 'npm install' for builds
+          npm ci
           npm run build
           cd ..
 
@@ -40,7 +41,7 @@ jobs:
       - name: 🐘 Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: "8.2"
 
       - name: 📦 Cache Composer dependencies
         uses: actions/cache@v3
@@ -69,16 +70,16 @@ jobs:
           mkdir deploy_dist/api
           cp -r API/. deploy_dist/api/
 
-          # Create .env file (CRITICAL STEP FROM PREVIOUS CHAT)
+          # Create .env file
           echo "${{ secrets.LARAVEL_ENV }}" > deploy_dist/api/.env
 
-          # Create .htaccess for API (CRITICAL STEP FROM PREVIOUS CHAT)
+          # Create .htaccess for API
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteRule ^(.*)$ public/\$1 [L]
           </IfModule>" > deploy_dist/api/.htaccess
 
-          # Create .htaccess for Vue (CRITICAL STEP FROM PREVIOUS CHAT)
+          # Create .htaccess for Vue
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
