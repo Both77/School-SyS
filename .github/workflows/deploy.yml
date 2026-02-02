@@ -24,12 +24,23 @@ jobs:
         with:
           node-version: "18"
 
+      - name: 📦 Install Frontend Dependencies
+        run: |
+          cd school-sms-web
+          npm ci
+          cd ..
+
+      - name: 🔍 Debug Login.vue
+        run: |
+          ls -la school-sms-web/src/pages
+          echo "---- FILE CONTENT ----"
+          sed -n '1,120p' school-sms-web/src/pages/Login.vue
+
       - name: 🔨 Build Frontend
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_URL }}
         run: |
           cd school-sms-web
-          npm ci
           npm run build
           cd ..
 
