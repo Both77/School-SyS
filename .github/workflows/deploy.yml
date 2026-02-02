@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       # --------------------------------------------------------
-      # 1. FRONTEND (Vue)
+      # FRONTEND (Vite / Vue)
       # --------------------------------------------------------
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
@@ -28,13 +28,6 @@ jobs:
         run: |
           cd school-sms-web
           npm ci
-          cd ..
-
-      - name: 🔍 Debug Login.vue
-        run: |
-          ls -la school-sms-web/src/pages
-          echo "---- FILE CONTENT ----"
-          sed -n '1,120p' school-sms-web/src/pages/Login.vue
 
       - name: 🔨 Build Frontend
         env:
@@ -42,10 +35,9 @@ jobs:
         run: |
           cd school-sms-web
           npm run build
-          cd ..
 
       # --------------------------------------------------------
-      # 2. BACKEND (Laravel)
+      # BACKEND (Laravel)
       # --------------------------------------------------------
       - name: 🐘 Setup PHP
         uses: shivammathur/setup-php@v2
@@ -55,31 +47,30 @@ jobs:
       - name: 📦 Cache Composer dependencies
         uses: actions/cache@v3
         with:
-          path: API/vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('API/composer.lock') }}
+          path: api/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('api/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: 🔨 Install Backend Dependencies
         run: |
-          cd API
+          cd api
           composer install --no-dev --optimize-autoloader --prefer-dist
-          cd ..
 
       # --------------------------------------------------------
-      # 3. PREPARE FILES
+      # PREPARE DEPLOYMENT FILES
       # --------------------------------------------------------
       - name: 📂 Prepare Deployment Files
         run: |
-          mkdir deploy_dist
+          mkdir -p deploy_dist
 
-          # Frontend build output
+          # Frontend output
           cp -r school-sms-web/dist/* deploy_dist/
 
-          # Backend (Laravel)
-          mkdir deploy_dist/api
-          cp -r API/. deploy_dist/api/
+          # Backend
+          mkdir -p deploy_dist/api
+          cp -r api/. deploy_dist/api/
 
-          # Laravel env
+          # Laravel .env
           echo "${{ secrets.LARAVEL_ENV }}" > deploy_dist/api/.env
 
           # API .htaccess
@@ -88,7 +79,7 @@ jobs:
             RewriteRule ^(.*)$ public/\$1 [L]
           </IfModule>" > deploy_dist/api/.htaccess
 
-          # Vue .htaccess
+          # SPA .htaccess
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
@@ -99,7 +90,7 @@ jobs:
           </IfModule>" > deploy_dist/.htaccess
 
       # --------------------------------------------------------
-      # 4. DEPLOY
+      # DEPLOY TO INFINITYFREE
       # --------------------------------------------------------
       - name: 🚀 Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
