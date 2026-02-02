@@ -2,9 +2,7 @@ name: Deploy to InfinityFree
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -16,49 +14,66 @@ jobs:
       - name: 🚚 Get latest code
         uses: actions/checkout@v4
 
-      # --------------------------------------------------------
-      # FRONTEND (Vite / Vue)
-      # --------------------------------------------------------
+      # ----------------------------
+      # FRONTEND (Vite/Vue)
+      # ----------------------------
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
 
-      - name: 📦 Install Frontend Dependencies
-        run: |
-          cd school-sms-web
-          npm ci
-
-      - name: 🔨 Build Frontend
+      - name: 📦 Install + Build Frontend
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_URL }}
         run: |
           cd school-sms-web
+          npm ci
           npm run build
 
-      # --------------------------------------------------------
-      # BACKEND (Laravel)
-      # --------------------------------------------------------
+      # ----------------------------
+      # BACKEND (Laravel) - auto detect folder
+      # ----------------------------
       - name: 🐘 Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.2"
 
+      - name: 🔍 Detect Laravel backend directory
+        id: detect_backend
+        run: |
+          BACKEND_DIR="$(find . -maxdepth 4 -type f -name artisan -print0 \
+            | xargs -0 -n1 dirname \
+            | while read d; do
+                if [ -f "$d/composer.json" ]; then echo "$d"; break; fi
+              done)"
+
+          if [ -z "$BACKEND_DIR" ]; then
+            echo "❌ Could not find Laravel backend (artisan + composer.json)."
+            echo "Repo root:"
+            ls -la
+            echo "Dirs:"
+            find . -maxdepth 2 -type d -print
+            exit 1
+          fi
+
+          echo "✅ Backend found at: $BACKEND_DIR"
+          echo "backend_dir=$BACKEND_DIR" >> "$GITHUB_OUTPUT"
+
       - name: 📦 Cache Composer dependencies
         uses: actions/cache@v3
         with:
-          path: api/vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles('api/composer.lock') }}
+          path: ${{ steps.detect_backend.outputs.backend_dir }}/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles(format('{0}/composer.lock', steps.detect_backend.outputs.backend_dir)) }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: 🔨 Install Backend Dependencies
         run: |
-          cd api
+          cd "${{ steps.detect_backend.outputs.backend_dir }}"
           composer install --no-dev --optimize-autoloader --prefer-dist
 
-      # --------------------------------------------------------
+      # ----------------------------
       # PREPARE DEPLOYMENT FILES
-      # --------------------------------------------------------
+      # ----------------------------
       - name: 📂 Prepare Deployment Files
         run: |
           mkdir -p deploy_dist
@@ -66,20 +81,20 @@ jobs:
           # Frontend output
           cp -r school-sms-web/dist/* deploy_dist/
 
-          # Backend
+          # Backend -> deploy_dist/api
           mkdir -p deploy_dist/api
-          cp -r api/. deploy_dist/api/
+          cp -r "${{ steps.detect_backend.outputs.backend_dir }}/." deploy_dist/api/
 
           # Laravel .env
           echo "${{ secrets.LARAVEL_ENV }}" > deploy_dist/api/.env
 
-          # API .htaccess
+          # API .htaccess (route /api/* to public/)
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteRule ^(.*)$ public/\$1 [L]
           </IfModule>" > deploy_dist/api/.htaccess
 
-          # SPA .htaccess
+          # Vue SPA .htaccess
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
@@ -89,9 +104,9 @@ jobs:
             RewriteRule . /index.html [L]
           </IfModule>" > deploy_dist/.htaccess
 
-      # --------------------------------------------------------
-      # DEPLOY TO INFINITYFREE
-      # --------------------------------------------------------
+      # ----------------------------
+      # DEPLOY
+      # ----------------------------
       - name: 🚀 Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
