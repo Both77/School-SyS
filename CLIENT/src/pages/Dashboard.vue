@@ -118,7 +118,7 @@
         <router-link
           v-if="isAdmin"
           to="/teachers"
-          class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          class="flex items-center p-4 border border-gray-201 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <div class="p-2 bg-yellow-100 rounded-lg mr-3">
             <svg class="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
