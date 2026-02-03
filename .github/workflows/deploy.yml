@@ -2,96 +2,82 @@ name: Deploy to InfinityFree
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   web-deploy:
     name: 🎉 Deploy
     runs-on: ubuntu-latest
-
     steps:
       - name: 🚚 Get latest code
         uses: actions/checkout@v4
 
-      # ----------------------------
-      # FRONTEND (Vite / Vue)
-      # ----------------------------
-      - name: 🟢 Setup Node.js
+      # --------------------------------------------------------
+      # 1. OPTIMIZE FRONTEND (Vue.js)
+      # --------------------------------------------------------
+      - name: 🟢 Setup Node.js (with Cache)
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: '18'
+          cache: 'npm'                  # Enables caching for npm
+          cache-dependency-path: school-sms-web/package-lock.json # Tells it where to look
 
-      - name: 📦 Install + Build Frontend
+      - name: 🔨 Build Frontend
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           cd school-sms-web
-          npm ci
+          npm ci                        # 'npm ci' is faster/safer than 'npm install' for builds
           npm run build
+          cd ..
 
-      # ----------------------------
-      # BACKEND (Laravel) - auto detect
-      # ----------------------------
+      # --------------------------------------------------------
+      # 2. OPTIMIZE BACKEND (Laravel)
+      # --------------------------------------------------------
       - name: 🐘 Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.2"
-
-      - name: 🔍 Detect Laravel backend directory
-        id: detect_backend
-        run: |
-          BACKEND_DIR="$(find . -maxdepth 4 -type f -name artisan -print0 \
-            | xargs -0 -n1 dirname \
-            | while read d; do
-                if [ -f "$d/composer.json" ]; then echo "$d"; break; fi
-              done)"
-
-          if [ -z "$BACKEND_DIR" ]; then
-            echo "❌ Could not find Laravel backend (artisan + composer.json)."
-            find . -maxdepth 2 -type d -print
-            exit 1
-          fi
-
-          echo "✅ Backend found at: $BACKEND_DIR"
-          echo "backend_dir=$BACKEND_DIR" >> "$GITHUB_OUTPUT"
+          php-version: '8.2'
 
       - name: 📦 Cache Composer dependencies
         uses: actions/cache@v3
         with:
-          path: ${{ steps.detect_backend.outputs.backend_dir }}/vendor
-          key: ${{ runner.os }}-composer-${{ hashFiles(format('{0}/composer.lock', steps.detect_backend.outputs.backend_dir)) }}
+          path: API/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('API/composer.lock') }}
           restore-keys: ${{ runner.os }}-composer-
 
       - name: 🔨 Install Backend Dependencies
         run: |
-          cd "${{ steps.detect_backend.outputs.backend_dir }}"
+          cd API
           composer install --no-dev --optimize-autoloader --prefer-dist
+          cd ..
 
-      # ----------------------------
-      # PREPARE DEPLOYMENT FILES
-      # ----------------------------
+      # --------------------------------------------------------
+      # 3. PREPARE & DEPLOY
+      # --------------------------------------------------------
       - name: 📂 Prepare Deployment Files
         run: |
-          mkdir -p deploy_dist
-
-          # Frontend
+          mkdir deploy_dist
+          
+          # Copy Frontend Build
           cp -r school-sms-web/dist/* deploy_dist/
+          
+          # Copy Backend (Laravel)
+          mkdir deploy_dist/api
+          cp -r API/. deploy_dist/api/
 
-          # Backend
-          mkdir -p deploy_dist/api
-          cp -r "${{ steps.detect_backend.outputs.backend_dir }}/." deploy_dist/api/
-
-          # Laravel env
+          # Create .env file (CRITICAL STEP FROM PREVIOUS CHAT)
           echo "${{ secrets.LARAVEL_ENV }}" > deploy_dist/api/.env
 
-          # Laravel rewrite
+          # Create .htaccess for API (CRITICAL STEP FROM PREVIOUS CHAT)
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteRule ^(.*)$ public/\$1 [L]
           </IfModule>" > deploy_dist/api/.htaccess
 
-          # Vue SPA rewrite
+          # Create .htaccess for Vue (CRITICAL STEP FROM PREVIOUS CHAT)
           echo "<IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /
@@ -101,31 +87,17 @@ jobs:
             RewriteRule . /index.html [L]
           </IfModule>" > deploy_dist/.htaccess
 
-      # ----------------------------
-      # DEPLOY (lftp – InfinityFree hardened)
-      # ----------------------------
-      - name: 🚀 Deploy via lftp (NO chmod, safe)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lftp
-
-          lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" "${{ secrets.FTP_SERVER }}" << 'EOF'
-          set ftp:passive-mode true
-          set ftp:chmod no
-          set ftp:ssl-allow no
-          set net:timeout 30
-          set net:max-retries 30
-          set net:reconnect-interval-base 5
-          set net:reconnect-interval-max 60
-          set net:persist-retries 1
-
-          mirror -R \
-            --parallel=1 \
-            --only-newer \
-            --no-perms \
-            --no-umask \
-            --verbose \
-            ./deploy_dist/ ./htdocs/
-
-          quit
-          EOF
+      - name: 🚀 Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deploy_dist/
+          server-dir: ./htdocs/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            deploy_dist/api/node_modules/**
+            deploy_dist/api/tests/**
