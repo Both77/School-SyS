@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -22,13 +23,13 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'                  # Enables caching for npm
-          cache-dependency-path: school-sms-web/package-lock.json # Tells it where to look
+          cache-dependency-path: CLIENT/package-lock.json # Tells it where to look
 
       - name: 🔨 Build Frontend
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
-          cd school-sms-web
+          cd CLIENT
           npm ci                        # 'npm ci' is faster/safer than 'npm install' for builds
           npm run build
           cd ..
@@ -59,7 +60,6 @@ jobs:
       # --------------------------------------------------------
       - name: 📂 Prepare Deployment Files
         run: |
-          run: |
           mkdir deploy_dist
           
           # Copy Frontend Build
