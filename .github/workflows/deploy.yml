@@ -59,10 +59,11 @@ jobs:
       # --------------------------------------------------------
       - name: 📂 Prepare Deployment Files
         run: |
+          run: |
           mkdir deploy_dist
           
           # Copy Frontend Build
-          cp -r school-sms-web/dist/* deploy_dist/
+          cp -r CLIENT/dist/* deploy_dist/
           
           # Copy Backend (Laravel)
           mkdir deploy_dist/api
